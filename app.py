@@ -1,347 +1,422 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP CONTROL | 관리자</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080a0f;
+      --panel: #11151e;
+      --border: #252c3a;
+      --blue: #4388ff;
+      --text: #f2f5fc;
+      --muted: #8993a7;
+    }
 
-import os
-import sqlite3
-import asyncio
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from html import escape
-from ipaddress import ip_address
+    * {
+      box-sizing: border-box;
+    }
 
-import requests
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from starlette.middleware.sessions import SessionMiddleware
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, "Malgun Gothic", sans-serif;
+    }
 
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 230px;
+      padding: 28px 18px;
+      background: #0c0f16;
+      border-right: 1px solid var(--border);
+    }
 
-# =========================
-# 기본 설정
-# =========================
+    .logo {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      margin: 5px 8px 40px;
+    }
 
-app = FastAPI()
+    .logo span {
+      color: var(--blue);
+    }
 
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
-SESSION_SECRET = os.getenv("SESSION_SECRET", "")
-HIDDEN_IP = os.getenv("HIDDEN_IP", "").strip()
+    .section-label {
+      color: #667187;
+      font-size: 11px;
+      font-weight: bold;
+      margin: 24px 10px 10px;
+      letter-spacing: 1.5px;
+    }
 
-DB_FILE = "visitors.db"
+    .nav-item {
+      display: block;
+      padding: 13px 14px;
+      margin: 5px 0;
+      border-radius: 9px;
+      color: #aeb8ca;
+      text-decoration: none;
+      font-size: 14px;
+    }
 
-if not ADMIN_PASSWORD:
-    raise RuntimeError("Render Environment에 ADMIN_PASSWORD를 설정하세요.")
+    .nav-item.active {
+      color: white;
+      background: #192a49;
+      border: 1px solid #254779;
+    }
 
-if not SESSION_SECRET:
-    raise RuntimeError("Render Environment에 SESSION_SECRET을 설정하세요.")
+    main {
+      margin-left: 230px;
+      padding: 32px;
+      max-width: 1600px;
+    }
 
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
 
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=SESSION_SECRET,
-    https_only=True,
-    same_site="lax",
-)
+    h1 {
+      font-size: 27px;
+      margin: 0 0 9px;
+    }
 
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
 
-# =========================
-# 데이터베이스
-# =========================
+    .admin-badge {
+      padding: 9px 13px;
+      border: 1px solid #284a7d;
+      border-radius: 9px;
+      color: #80b5ff;
+      background: #101d32;
+      font-size: 12px;
+      font-weight: bold;
+    }
 
-def init_db():
-    with sqlite3.connect(DB_FILE) as db:
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS visits (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ip TEXT NOT NULL,
-                visited_at TEXT NOT NULL,
-                path TEXT NOT NULL,
-                vpn_status TEXT DEFAULT '확인 불가'
-            )
-        """)
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
 
-        # 이전 버전 데이터베이스와 호환
-        columns = {
-            row[1]
-            for row in db.execute("PRAGMA table_info(visits)").fetchall()
-        }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 21px;
+      min-width: 0;
+    }
 
-        if "vpn_status" not in columns:
-            db.execute(
-                "ALTER TABLE visits ADD COLUMN vpn_status TEXT DEFAULT '확인 불가'"
-            )
+    .stat-title {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 18px;
+    }
 
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
 
-init_db()
+    .stat-note {
+      color: #6d9eff;
+      font-size: 12px;
+      margin-top: 12px;
+    }
 
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
 
-# =========================
-# 방문자 IP 확인
-# =========================
+    h2 {
+      font-size: 18px;
+      margin: 0 0 7px;
+    }
 
-def get_ip(request: Request) -> str:
-    # Render의 프록시를 신뢰하도록 Start Command를 설정해야 함
-    if request.client:
-        return request.client.host
-    return "unknown"
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
 
+    input, select, button {
+      color: var(--text);
+      background: #0b0e15;
+      border: 1px solid #30394a;
+      border-radius: 8px;
+      padding: 11px 12px;
+      font: inherit;
+      font-size: 13px;
+    }
 
-# =========================
-# VPN / 프록시 확인
-# =========================
+    input {
+      width: 230px;
+      max-width: 100%;
+    }
 
-def check_vpn(ip: str) -> str:
-    try:
-        parsed_ip = ip_address(ip)
+    button {
+      background: var(--blue);
+      border-color: var(--blue);
+      cursor: pointer;
+      font-weight: bold;
+    }
 
-        if not parsed_ip.is_global:
-            return "확인 불가"
+    button:hover {
+      filter: brightness(1.15);
+    }
 
-        response = requests.get(
-            f"http://ip-api.com/json/{ip}",
-            params={"fields": "status,message,proxy,hosting"},
-            timeout=4,
-        )
-        response.raise_for_status()
-        data = response.json()
+    .table-wrap {
+      overflow-x: auto;
+      margin: 0 -4px;
+    }
 
-        if data.get("status") != "success":
-            return "확인 불가"
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      white-space: nowrap;
+      font-size: 13px;
+    }
 
-        if data.get("proxy") or data.get("hosting"):
-            return "VPN/프록시 의심"
+    th, td {
+      text-align: left;
+      padding: 16px 14px;
+      border-bottom: 1px solid #222937;
+    }
 
-        return "일반 IP 추정"
+    th {
+      color: #8f9ab0;
+      font-weight: 600;
+      background: #0d1119;
+    }
 
-    except Exception:
-        return "확인 불가"
+    td {
+      color: #d8deea;
+    }
 
+    .ip {
+      color: #83b5ff;
+      font-family: Consolas, monospace;
+    }
 
-async def check_vpn_async(ip: str) -> str:
-    # 외부 조회 때문에 웹사이트가 오래 멈추지 않도록 별도 스레드 사용
-    return await asyncio.to_thread(check_vpn, ip)
+    .status {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      background: #132b20;
+      color: #6de0a0;
+    }
 
+    .status.unknown {
+      background: #302817;
+      color: #f4c86a;
+    }
 
-# =========================
-# 방문 기록
-# =========================
+    .empty {
+      padding: 35px;
+      color: var(--muted);
+      text-align: center;
+    }
 
-@app.middleware("http")
-async def log_visits(request: Request, call_next):
-    path = request.url.path
+    footer {
+      color: #596477;
+      text-align: center;
+      font-size: 12px;
+      margin-top: 25px;
+    }
 
-    # 관리자 페이지와 로그인/로그아웃은 기록하지 않음
-    ignored_paths = {"/admin", "/login", "/logout"}
+    @media (max-width: 1100px) {
+      .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
 
-    if path not in ignored_paths:
-        try:
-            ip = get_ip(request)
+      main {
+        padding: 22px;
+      }
+    }
 
-            # 숨길 IP는 기록 자체를 저장하지 않음
-            if ip != HIDDEN_IP and ip != "unknown":
-                now = datetime.now(
-                    ZoneInfo("Asia/Seoul")
-                ).strftime("%Y-%m-%d %H:%M:%S")
+    @media (max-width: 650px) {
+      .sidebar {
+        position: static;
+        width: 100%;
+        padding: 17px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
 
-                vpn_status = await check_vpn_async(ip)
+      .logo {
+        margin: 4px 5px 15px;
+      }
 
-                with sqlite3.connect(DB_FILE) as db:
-                    db.execute(
-                        """
-                        INSERT INTO visits
-                        (ip, visited_at, path, vpn_status)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        (ip, now, path, vpn_status),
-                    )
+      .section-label {
+        display: none;
+      }
 
-        except Exception as error:
-            print("방문 기록 오류:", error)
+      .nav-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
 
-    return await call_next(request)
+      .nav-item {
+        margin: 0;
+        padding: 10px;
+      }
 
+      main {
+        margin-left: 0;
+        padding: 20px 14px;
+      }
 
-# =========================
-# 메인 페이지
-# =========================
+      h1 {
+        font-size: 22px;
+      }
 
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <!DOCTYPE html>
-    <html lang="ko">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>내 웹사이트</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                text-align: center;
-                padding: 70px 20px;
-                background: #f5f7fb;
-                color: #202536;
-            }
-            main {
-                max-width: 650px;
-                margin: auto;
-                padding: 35px 20px;
-                background: white;
-                border-radius: 18px;
-                box-shadow: 0 5px 25px #0000000d;
-            }
-            h1 { color: #3458db; }
-        </style>
-    </head>
-    <body>
-        <main>
-            <h1>내 웹사이트에 오신 것을 환영합니다!</h1>
-            <p>웹사이트가 정상적으로 실행 중입니다.</p>
-            <p>방문 기록은 운영 및 보안 목적으로 저장될 수 있습니다.</p>
-        </main>
-    </body>
-    </html>
-    """
+      .stats {
+        gap: 10px;
+      }
 
+      .card {
+        padding: 15px;
+      }
 
-# =========================
-# 관리자 로그인 페이지
-# =========================
+      .stat-value {
+        font-size: 23px;
+      }
 
-@app.get("/login", response_class=HTMLResponse)
-async def login_page():
-    return """
-    <!DOCTYPE html>
-    <html lang="ko">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>관리자 로그인</title>
-    </head>
-    <body style="font-family:Arial;text-align:center;padding:60px 15px">
-        <h1>관리자 로그인</h1>
-        <form method="post" action="/login">
-            <input
-                name="password"
-                type="password"
-                placeholder="관리자 비밀번호"
-                required
-                autocomplete="current-password"
-            >
-            <button type="submit">로그인</button>
-        </form>
-    </body>
-    </html>
-    """
+      .topbar {
+        align-items: flex-start;
+      }
 
+      input {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo">IP <span>CONTROL</span></div>
+    <div class="section-label">MANAGEMENT</div>
+    <nav class="nav-list">
+      <a class="nav-item active" href="/admin">▦ &nbsp; 대시보드</a>
+      <a class="nav-item" href="#records">⌕ &nbsp; 접속 기록</a>
+    </nav>
+    <div class="section-label">SYSTEM</div>
+    <nav class="nav-list">
+      <a class="nav-item" href="/">↗ &nbsp; 사이트로 이동</a>
+    </nav>
+  </aside>
 
-@app.post("/login")
-async def login(request: Request, password: str = Form(...)):
-    if password != ADMIN_PASSWORD:
-        return HTMLResponse(
-            "비밀번호가 틀렸습니다. <a href='/login'>다시 시도</a>",
-            status_code=401,
-        )
+  <main>
+    <header class="topbar">
+      <div>
+        <h1>관리자 대시보드</h1>
+        <div class="muted">방문 기록과 접속 현황을 확인하세요.</div>
+      </div>
+      <div class="admin-badge">● ADMIN PANEL</div>
+    </header>
 
-    request.session["is_admin"] = True
-    return RedirectResponse("/admin", status_code=303)
+    <section class="stats">
+      <div class="card">
+        <div class="stat-title">전체 접속 기록</div>
+        <div class="stat-value" id="total">—</div>
+        <div class="stat-note">누적 기록</div>
+      </div>
+      <div class="card">
+        <div class="stat-title">고유 IP 수</div>
+        <div class="stat-value" id="unique">—</div>
+        <div class="stat-note">중복 제외</div>
+      </div>
+      <div class="card">
+        <div class="stat-title">VPN · 프록시</div>
+        <div class="stat-value" id="vpn">—</div>
+        <div class="stat-note">확인 가능한 기록</div>
+      </div>
+      <div class="card">
+        <div class="stat-title">최근 접속</div>
+        <div class="stat-value" id="latest" style="font-size:18px">—</div>
+        <div class="stat-note">마지막 기록 시간</div>
+      </div>
+    </section>
 
-
-# =========================
-# 관리자 방문 기록 페이지
-# =========================
-
-@app.get("/admin", response_class=HTMLResponse)
-async def admin(request: Request):
-    if not request.session.get("is_admin"):
-        return RedirectResponse("/login", status_code=303)
-
-    with sqlite3.connect(DB_FILE) as db:
-        rows = db.execute(
-            """
-            SELECT id, ip, visited_at, path, vpn_status
-            FROM visits
-            ORDER BY id DESC
-            LIMIT 500
-            """
-        ).fetchall()
-
-    table_rows = ""
-
-    for visit_id, ip, visited_at, path, vpn_status in rows:
-        table_rows += f"""
-        <tr>
-            <td>{visit_id}</td>
-            <td>{escape(ip)}</td>
-            <td>{escape(visited_at)}</td>
-            <td>{escape(path)}</td>
-            <td>{escape(vpn_status or '확인 불가')}</td>
-        </tr>
-        """
-
-    if not table_rows:
-        table_rows = """
-        <tr>
-            <td colspan="5">아직 저장된 방문 기록이 없습니다.</td>
-        </tr>
-        """
-
-    return f"""
-    <!DOCTYPE html>
-    <html lang="ko">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>관리자 페이지</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                padding: 20px;
-                color: #222;
-            }}
-            .table-wrap {{ overflow-x: auto; }}
-            table {{
-                border-collapse: collapse;
-                width: 100%;
-                min-width: 650px;
-            }}
-            th, td {{
-                border: 1px solid #ddd;
-                padding: 10px;
-                text-align: left;
-            }}
-            th {{ background: #edf1f8; }}
-            a {{ margin-right: 12px; }}
-        </style>
-    </head>
-    <body>
-        <h1>방문 기록 관리</h1>
-        <p>최근 방문 기록 최대 500개</p>
-        <p>
-            <a href="/">메인 페이지</a>
-            <a href="/logout">로그아웃</a>
-        </p>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>번호</th>
-                        <th>IP 주소</th>
-                        <th>접속 시간</th>
-                        <th>경로</th>
-                        <th>VPN 상태</th>
-                    </tr>
-                </thead>
-                <tbody>{table_rows}</tbody>
-            </table>
+    <section class="card" id="records">
+      <div class="table-header">
+        <div>
+          <h2>접속 기록</h2>
+          <div class="muted">기록을 검색하고 필터링하세요.</div>
         </div>
-        <p>VPN 상태는 추정 결과이며 정확하지 않을 수 있습니다.</p>
-    </body>
-    </html>
-    """
+        <div class="filters">
+          <input id="search" placeholder="IP 또는 경로 검색">
+          <input id="date" type="date" aria-label="날짜 필터">
+          <button id="reset" type="button">초기화</button>
+        </div>
+      </div>
 
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>IP 주소</th>
+              <th>접속 시간</th>
+              <th>경로</th>
+              <th>VPN 상태</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr>
+              <td colspan="4" class="empty">
+                기존 서버의 기록 데이터 연결이 필요합니다.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-# =========================
-# 로그아웃
-# =========================
+    <footer>IP CONTROL · PRIVATE ADMINISTRATION</footer>
+  </main>
 
-@app.get("/logout")
-async def logout(request: Request):
-    request.session.clear()
-    return RedirectResponse("/", status_code=303)
+  <script>
+    // 실제 데이터는 기존 Flask 서버에서 안전하게 전달해야 합니다.
+    // 현재는 디자인 확인용이며, 임의의 IP 기록을 만들지 않습니다.
+
+    const search = document.getElementById("search");
+    const date = document.getElementById("date");
+
+    function filterNotice() {
+      document.getElementById("rows").innerHTML =
+        '<tr><td colspan="4" class="empty">' +
+        '실제 검색을 사용하려면 기존 IP 기록 데이터와 연결해야 합니다.' +
+        '</td></tr>';
+    }
+
+    search.addEventListener("input", filterNotice);
+    date.addEventListener("change", filterNotice);
+
+    document.getElementById("reset").addEventListener("click", () => {
+      search.value = "";
+      date.value = "";
+      filterNotice();
+    });
+  </script>
+</body>
+</html>
