@@ -1,150 +1,242 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IP CONTROL | 관리자</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            padding: 25px;
-            background: #080b12;
-            color: #edf2ff;
-            font-family: Arial, sans-serif;
-        }
-        .container { max-width: 1100px; margin: auto; }
-        h1 { color: #6ca4ff; margin-bottom: 5px; }
-        .subtitle { color: #8995ad; margin-bottom: 25px; }
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-        .card {
-            background: #111827;
-            border: 1px solid #25334b;
-            border-radius: 12px;
-            padding: 20px;
-        }
-        .card span { color: #9aa8c1; font-size: 14px; }
-        .card h2 { margin: 12px 0 0; font-size: 28px; }
-        .panel {
-            background: #111827;
-            border: 1px solid #25334b;
-            border-radius: 12px;
-            padding: 20px;
-            overflow: hidden;
-        }
-        .toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin: 15px 0;
-        }
-        input {
-            flex: 1;
-            min-width: 180px;
-            padding: 12px;
-            border: 1px solid #34435e;
-            border-radius: 8px;
-            background: #080b12;
-            color: white;
-        }
-        button {
-            padding: 12px 16px;
-            border: 0;
-            border-radius: 8px;
-            background: #3478f6;
-            color: white;
-            cursor: pointer;
-        }
-        .table-wrap { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; text-align: left; }
-        th, td {
-            padding: 13px 10px;
-            border-bottom: 1px solid #25334b;
-            white-space: nowrap;
-        }
-        th { color: #9eb9ee; font-size: 13px; }
-        td { font-size: 14px; }
-        .empty { color: #8995ad; padding: 25px 0; }
-        .notice { color: #8995ad; font-size: 12px; margin-top: 18px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IP CONTROL 관리자</title>
+<style>
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 24px;
+    background: #080b12;
+    color: #edf3ff;
+    font-family: Arial, sans-serif;
+}
+header, .panel, .stat {
+    background: #111827;
+    border: 1px solid #25334b;
+    border-radius: 14px;
+}
+header {
+    padding: 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+h1 { margin: 0; color: #79aaff; }
+h2 { font-size: 18px; }
+small, .muted { color: #9cabc3; }
+a { color: #91b9ff; }
+button, input {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #34435e;
+}
+button {
+    background: #3478f6;
+    color: white;
+    cursor: pointer;
+}
+button:hover { background: #2464d8; }
+input {
+    background: #080b12;
+    color: white;
+}
+.stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    gap: 14px;
+    margin: 18px 0;
+}
+.stat { padding: 18px; }
+.stat strong {
+    display: block;
+    font-size: 28px;
+    margin-top: 8px;
+}
+.panel { padding: 18px; margin-top: 18px; }
+.tools {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.table-wrap { overflow-x: auto; }
+table {
+    width: 100%;
+    min-width: 1100px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+th, td {
+    text-align: left;
+    padding: 12px 10px;
+    border-bottom: 1px solid #25334b;
+    vertical-align: top;
+}
+th { color: #9ebeff; }
+td { overflow-wrap: anywhere; }
+.isp-result {
+    margin-top: 8px;
+    line-height: 1.7;
+    color: #cbd8ee;
+    min-width: 180px;
+}
+.badge {
+    display: inline-block;
+    background: #1c3152;
+    color: #b9d2ff;
+    padding: 4px 7px;
+    border-radius: 6px;
+}
+@media (max-width: 650px) {
+    body { padding: 12px; }
+    .stats { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
-<div class="container">
-    <h1>IP CONTROL</h1>
-    <p class="subtitle">웹사이트 방문 기록 관리자</p>
+<header>
+    <div>
+        <h1>IP CONTROL</h1>
+        <p class="muted">방문 기록 및 접속 환경 관리</p>
+    </div>
+    <div>
+        <button onclick="location.reload()">새로고침</button>
+        <a href="/admin/logout">로그아웃</a>
+    </div>
+</header>
 
-    <div class="cards">
-        <div class="card">
-            <span>전체 방문 기록</span>
-            <h2>{{ total }}</h2>
-        </div>
-        <div class="card">
-            <span>기록된 고유 IP 수</span>
-            <h2>{{ unique }}</h2>
-        </div>
-        <div class="card">
-            <span>최근 방문 기록</span>
-            <p>{{ latest }}</p>
-        </div>
+<section class="stats">
+    <div class="stat">
+        <span class="muted">총 방문 기록</span>
+        <strong>{{ total }}</strong>
+    </div>
+    <div class="stat">
+        <span class="muted">기록된 고유 IP 수</span>
+        <strong>{{ unique }}</strong>
+    </div>
+    <div class="stat">
+        <span class="muted">최근 방문 시간</span>
+        <p>{{ latest }}</p>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>방문 기록</h2>
+    <p class="muted">
+        최대 최근 500건을 표시합니다. ISP 조회를 누르면 외부 서비스에
+        해당 IP를 전달하여 통신사·지역 정보를 조회합니다.
+    </p>
+
+    <div class="tools">
+        <input id="search" type="search"
+               placeholder="IP, 페이지, 브라우저 검색">
+        <button onclick="clearSearch()">검색 초기화</button>
     </div>
 
-    <div class="panel">
-        <h3>방문 기록</h3>
-        <div class="toolbar">
-            <input id="search" type="text"
-                   placeholder="IP 또는 경로 검색..."
-                   oninput="filterRows()">
-            <button onclick="location.reload()">새로고침</button>
-        </div>
-
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>IP 주소</th>
-                        <th>방문 경로</th>
-                        <th>방문 시간 (UTC)</th>
-                    </tr>
-                </thead>
-                <tbody id="records">
-                    {% for record in records %}
-                    <tr>
-                        <td>{{ record["ip"] }}</td>
-                        <td>{{ record["path"] }}</td>
-                        <td>{{ record["visited_at"] }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="3" class="empty">
-                            아직 방문 기록이 없습니다.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <p class="notice">
-            방문 기록은 사이트 운영 및 보안 목적으로 표시됩니다.
-            IP 주소는 개인정보가 될 수 있으므로 접근을 제한하고
-            필요한 기간만 보관하세요.
-        </p>
+    <div class="table-wrap">
+    <table id="visits">
+        <thead>
+        <tr>
+            <th>IP 주소</th>
+            <th>방문 시간 (UTC)</th>
+            <th>페이지</th>
+            <th>IP별 방문 횟수</th>
+            <th>브라우저</th>
+            <th>운영체제</th>
+            <th>화면 크기</th>
+            <th>ISP / 지역 조회</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for record in records %}
+        <tr>
+            <td class="ip">{{ record["ip"] }}</td>
+            <td>{{ record["visited_at"] }}</td>
+            <td>{{ record["path"] }}</td>
+            <td><span class="badge">{{ record["ip_count"] }}회</span></td>
+            <td>{{ record["browser"] or "기록 없음" }}</td>
+            <td>{{ record["os"] or "기록 없음" }}</td>
+            <td>
+                {% if record["screen_width"] and record["screen_height"] %}
+                    {{ record["screen_width"] }} × {{ record["screen_height"] }}
+                {% else %}
+                    기록 없음
+                {% endif %}
+            </td>
+            <td>
+                <button class="isp-button"
+                    data-ip="{{ record['ip'] }}"
+                    onclick="lookupISP(this)">ISP 조회</button>
+                <div class="isp-result"></div>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8">아직 방문 기록이 없습니다.</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
     </div>
-</div>
+</section>
 
 <script>
-function filterRows() {
-    const query = document.getElementById("search").value.toLowerCase();
-    document.querySelectorAll("#records tr").forEach(row => {
+const searchInput = document.getElementById("search");
+
+searchInput.addEventListener("input", () => {
+    const query = searchInput.value.toLowerCase().trim();
+    document.querySelectorAll("#visits tbody tr").forEach(row => {
         row.style.display = row.innerText.toLowerCase().includes(query)
             ? ""
             : "none";
     });
+});
+
+function clearSearch() {
+    searchInput.value = "";
+    searchInput.dispatchEvent(new Event("input"));
+}
+
+async function lookupISP(button) {
+    const ip = button.dataset.ip;
+    const result = button.parentElement.querySelector(".isp-result");
+
+    button.disabled = true;
+    result.textContent = "조회 중...";
+
+    try {
+        const response = await fetch("/admin/isp?ip=" + encodeURIComponent(ip));
+
+        if (response.status === 401) {
+            result.textContent = "로그인이 만료되었습니다.";
+            return;
+        }
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            result.textContent = data.error || "조회에 실패했습니다.";
+            return;
+        }
+
+        // textContent로 출력하여 응답 내용을 HTML로 실행하지 않음
+        result.textContent =
+            "통신사: " + data.isp +
+            " | 조직: " + data.org +
+            " | 국가: " + data.country +
+            " | 지역: " + data.region +
+            " | 도시: " + data.city +
+            " | ASN: " + data.asn;
+    } catch (error) {
+        result.textContent = "조회 서비스 연결 실패";
+    } finally {
+        button.disabled = false;
+    }
 }
 </script>
 </body>
