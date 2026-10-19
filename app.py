@@ -125,9 +125,34 @@ def parse_device(user_agent: str):
 init_db()
 
 
+
 @app.get("/", response_class=HTMLResponse)
-async def home():
-    # 방문 기록은 아래 동의 화면에서 동의한 뒤 전송
+async def home(request: Request):
+    # 홈페이지 방문 기록 저장
+    ip = get_ip(request)
+    user_agent = request.headers.get("user-agent", "")[:1000]
+    browser, os_name = parse_device(user_agent)
+
+    with connect_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO visits
+            (ip, path, visited_at, user_agent, browser, os,
+             screen_width, screen_height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                ip,
+                "/",
+                datetime.now(timezone.utc).isoformat(),
+                user_agent,
+                browser,
+                os_name,
+                None,
+                None,
+            ),
+        )
+
     return """
 <!DOCTYPE html>
 <html lang="ko">
@@ -137,72 +162,41 @@ async def home():
 <title>IP CONTROL</title>
 <style>
 body {
-    background:#080b12;color:white;font-family:Arial,sans-serif;
-    padding:40px;line-height:1.7
+    background:#080b12;
+    color:white;
+    font-family:Arial,sans-serif;
+    padding:40px;
+    line-height:1.7
 }
 .panel {
-    max-width:650px;margin:60px auto;background:#111827;
-    border:1px solid #25334b;border-radius:16px;padding:28px
+    max-width:650px;
+    margin:60px auto;
+    background:#111827;
+    border:1px solid #25334b;
+    border-radius:16px;
+    padding:28px
 }
 button,a {
-    background:#3478f6;color:white;padding:12px 18px;
-    border:0;border-radius:8px;cursor:pointer;text-decoration:none
+    background:#3478f6;
+    color:white;
+    padding:12px 18px;
+    border:0;
+    border-radius:8px;
+    cursor:pointer;
+    text-decoration:none
 }
-.muted {color:#a9b6cc;font-size:14px}
 </style>
 </head>
 <body>
 <div class="panel">
     <h1>IP CONTROL</h1>
     <p>사이트가 정상적으로 실행 중입니다.</p>
-    <p class="muted">
-    보안 및 방문 통계를 위해 동의한 경우 IP 주소, 방문 시간,
-    방문 페이지, 브라우저·운영체제 및 화면 크기 일부를 기록합니다.
-    화면 크기는 브라우저에서 전달받습니다.
-    </p>
-    <button id="consent">동의하고 계속</button>
-    <p id="status" class="muted"></p>
-    <p><a href="/admin">관리자 페이지</a></p>
+    <p>방문 통계 및 보안 관리 기능이 활성화되어 있습니다.</p>
+    <a href="/admin">관리자 페이지</a>
 </div>
-<script>
-const button = document.getElementById("consent");
-const statusText = document.getElementById("status");
-
-async function recordVisit() {
-    try {
-        const response = await fetch("/track", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                consent: true,
-                width: window.innerWidth,
-                height: window.innerHeight
-            })
-        });
-        if (!response.ok) throw new Error("기록 실패");
-        statusText.textContent = "동의가 저장되었습니다.";
-        button.disabled = true;
-        button.textContent = "동의 완료";
-    } catch (error) {
-        statusText.textContent = "기록에 실패했습니다. 다시 시도해 주세요.";
-        button.disabled = false;
-    }
-}
-
-if (localStorage.getItem("ipcontrol_consent") === "yes") {
-    button.textContent = "방문 기록 동의 완료";
-    recordVisit();
-}
-
-button.addEventListener("click", () => {
-    localStorage.setItem("ipcontrol_consent", "yes");
-    recordVisit();
-});
-</script>
 </body>
 </html>
 """
-
 
 @app.post("/track")
 async def track(request: Request):
